@@ -1,0 +1,2275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Stitch Studio</title>
+<style>
+  :root {
+    --bg: #f5f2ee;
+    --surface: #faf8f5;
+    --surface2: #f0ece6;
+    --border: #ddd8d0;
+    --border2: #c8c0b4;
+    --text: #2c2820;
+    --text2: #7a6e62;
+    --text3: #a89e92;
+    --accent: #8b6f47;
+    --accent2: #c49a5e;
+    --accent-light: #f0e8dc;
+    --red: #c0392b;
+    --green: #2e7d32;
+    --shadow: rgba(44,40,32,0.12);
+    --radius: 10px;
+    --radius-sm: 6px;
+    --toolbar-h: 56px;
+    --panel-w: 300px;
+    --font: 'Georgia', serif;
+    --font-ui: system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font-ui); font-size: 14px; position: fixed; width: 100%; touch-action: none; }
+
+  /* === LAYOUT === */
+  /* #app defined below with touch-action */
+  #toolbar { display: flex; align-items: center; gap: 2px; padding: 0 8px; height: var(--toolbar-h); background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; touch-action: pan-x; }
+  #toolbar::-webkit-scrollbar { display: none; }
+  /* Fade on right edge to hint scrollability */
+  #toolbar-wrap { position: relative; flex-shrink: 0; }
+  #toolbar-wrap::after { content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: 24px; background: linear-gradient(to right, transparent, var(--surface)); pointer-events: none; }
+  #app { display: flex; flex-direction: column; height: 100%; touch-action: none; }
+  #canvas-area { flex: 1; overflow: hidden; position: relative; background: #e8e0d4; touch-action: none; }
+  #canvas-wrapper { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: crosshair; }
+  /* Re-allow scrolling inside panels and modal boxes only */
+  .panel { touch-action: pan-y; }
+  .modal-box { touch-action: pan-y; }
+  #main-canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+  #bottom-bar { height: 40px; background: var(--surface); border-top: 1px solid var(--border); display: flex; align-items: center; padding: 0 12px; gap: 12px; font-size: 12px; color: var(--text2); flex-shrink: 0; }
+  
+  /* === PANELS === */
+  .panel-overlay { position: fixed; inset: 0; z-index: 100; display: none; }
+  .panel-overlay.open { display: block; }
+  .panel-bg { position: absolute; inset: 0; background: rgba(0,0,0,0.3); }
+  .panel { position: absolute; background: var(--surface); border-radius: var(--radius) var(--radius) 0 0; max-height: 92vh; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; transition: transform 0.3s cubic-bezier(0.4,0,0.2,1); padding-bottom: 24px; }
+  .panel.bottom { bottom: 0; left: 0; right: 0; transform: translateY(100%); }
+  .panel-overlay.open .panel.bottom { transform: translateY(0); }
+  .panel.right { top: 0; right: 0; bottom: 0; width: min(var(--panel-w), 100vw); border-radius: var(--radius) 0 0 var(--radius); transform: translateX(100%); overflow-y: auto; }
+  .panel-overlay.open .panel.right { transform: translateX(0); }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 12px; position: sticky; top: 0; background: var(--surface); border-bottom: 1px solid var(--border); z-index: 1; }
+  .panel-title { font-size: 15px; font-weight: 600; color: var(--text); }
+  .panel-close { width: 32px; height: 32px; border: none; background: var(--surface2); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--text2); }
+  .panel-section { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .panel-section:last-child { border-bottom: none; }
+  .section-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+
+  /* === TOOLBAR BUTTONS === */
+  .tb-btn { min-width: 44px; height: 44px; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text2); flex-shrink: 0; transition: background 0.15s, color 0.15s; position: relative; }
+  .tb-btn:active, .tb-btn.active { background: var(--accent-light); color: var(--accent); }
+  .tb-btn.active { color: var(--accent); }
+  .tb-sep { width: 1px; height: 28px; background: var(--border); flex-shrink: 0; margin: 0 4px; }
+  .tb-color-swatch { width: 30px; height: 30px; border-radius: var(--radius-sm); border: 2px solid var(--border2); cursor: pointer; flex-shrink: 0; }
+
+  /* === FORM ELEMENTS === */
+  input[type=text], input[type=number], select, textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg); color: var(--text); font-size: 13px; font-family: var(--font-ui);
+    outline: none; transition: border-color 0.15s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent2); }
+  .btn { padding: 9px 16px; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 500; font-family: var(--font-ui); transition: all 0.15s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #7a5e38; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--border); }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+
+  /* === COLOR PICKER === */
+  #color-wheel-canvas { display: block; border-radius: 50%; cursor: crosshair; touch-action: none; }
+  #color-brightness { width: 100%; height: 20px; border-radius: 4px; cursor: pointer; border: 1px solid var(--border); margin-top: 10px; touch-action: none; }
+  .color-preview-row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .color-preview-box { width: 48px; height: 48px; border-radius: var(--radius-sm); border: 2px solid var(--border2); flex-shrink: 0; }
+  .color-hex-input { flex: 1; font-family: monospace; font-size: 14px; }
+  .recent-colors { display: flex; flex-wrap: wrap; gap: 6px; }
+  .color-dot { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border2); cursor: pointer; flex-shrink: 0; transition: transform 0.1s; }
+  .color-dot:active { transform: scale(1.15); }
+  .color-dot.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
+  .palette-swatch { width: 36px; height: 36px; border-radius: var(--radius-sm); border: 2px solid var(--border); cursor: pointer; flex-shrink: 0; transition: transform 0.1s; position: relative; }
+  .palette-swatch:active { transform: scale(1.1); }
+  .palette-swatch.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
+  .palette-swatch .del-btn { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 50%; background: var(--red); color: #fff; border: none; font-size: 10px; display: none; align-items: center; justify-content: center; cursor: pointer; }
+  .palette-swatch:hover .del-btn { display: flex; }
+  .palette-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* === GRID PRESETS === */
+  .preset-btn { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface2); cursor: pointer; font-size: 12px; color: var(--text); transition: all 0.15s; }
+  .preset-btn:hover { background: var(--accent-light); border-color: var(--accent2); }
+  .presets-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* === THREAD LEGEND === */
+  .legend-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .legend-row:last-child { border-bottom: none; }
+  .legend-swatch { width: 24px; height: 24px; border-radius: 4px; flex-shrink: 0; border: 1px solid var(--border2); }
+  .legend-info { flex: 1; min-width: 0; }
+  .legend-color-hex { font-family: monospace; font-size: 11px; color: var(--text3); }
+  .legend-count { font-size: 12px; font-weight: 600; color: var(--text2); }
+  .legend-pct { font-size: 11px; color: var(--text3); }
+  .legend-floss { font-size: 11px; color: var(--accent); }
+  .progress-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 4px; }
+  .progress-fill { height: 100%; border-radius: 2px; }
+
+  /* === ZOOM CONTROLS === */
+  .zoom-control { display: flex; align-items: center; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 2px 4px; }
+  .zoom-btn { width: 28px; height: 28px; border: none; background: transparent; cursor: pointer; font-size: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--text2); }
+  .zoom-btn:hover { background: var(--surface2); }
+  .zoom-label { font-size: 12px; color: var(--text2); min-width: 36px; text-align: center; }
+
+  /* === FLOSS EDITOR === */
+  .floss-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .floss-swatch { width: 32px; height: 32px; border-radius: var(--radius-sm); border: 1px solid var(--border2); flex-shrink: 0; cursor: pointer; }
+  .floss-fields { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .floss-row { display: flex; gap: 6px; }
+  .floss-row input, .floss-row select { flex: 1; }
+
+  /* === MISC === */
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; }
+  .toggle-label { font-size: 13px; color: var(--text); }
+  .toggle { width: 40px; height: 22px; background: var(--border2); border-radius: 11px; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
+  .toggle.on { background: var(--accent); }
+  .toggle::after { content: ''; position: absolute; width: 18px; height: 18px; background: #fff; border-radius: 50%; top: 2px; left: 2px; transition: left 0.2s; box-shadow: 0 1px 3px var(--shadow); }
+  .toggle.on::after { left: 20px; }
+  .slider-row { display: flex; align-items: center; gap: 10px; }
+  .slider-row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .slider-val { font-size: 12px; color: var(--text2); min-width: 30px; text-align: right; }
+  .info-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; background: var(--accent-light); border-radius: 10px; font-size: 11px; color: var(--accent); font-weight: 500; }
+
+  /* === RGB DISPLAY === */
+  .rgb-display { display: flex; gap: 6px; }
+  .rgb-field { flex: 1; text-align: center; }
+  .rgb-field input { text-align: center; }
+  .rgb-label { font-size: 10px; color: var(--text3); text-align: center; margin-top: 2px; }
+
+  /* === REPLACE COLOR === */
+  .replace-row { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+  .replace-swatch { width: 40px; height: 40px; border-radius: var(--radius-sm); border: 2px solid var(--border2); cursor: pointer; flex-shrink: 0; }
+
+  /* === IMAGE IMPORT === */
+  #img-preview-canvas { display: block; max-width: 100%; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+  .file-drop { border: 2px dashed var(--border2); border-radius: var(--radius); padding: 24px; text-align: center; cursor: pointer; color: var(--text3); font-size: 13px; transition: all 0.2s; }
+  .file-drop:hover { border-color: var(--accent2); color: var(--accent); background: var(--accent-light); }
+
+  /* === TRACING === */
+  #tracing-container { border: 1.5px dashed rgba(100,140,200,0.7); }
+  #tracing-container:not(:hover) { border-color: rgba(100,140,200,0.3); }
+  #tracing-container.locked { pointer-events: none; border: 1.5px dashed rgba(100,140,200,0.18); cursor: default; }
+  #tracing-container.locked #trace-lock-btn { pointer-events: auto; cursor: pointer; }  /* always clickable to unlock */
+  .trace-handle { position:absolute; width:12px; height:12px; background:#fff; border:2px solid rgba(100,140,200,0.9); border-radius:2px; z-index:2; touch-action:none; }
+  .trace-edge { width:10px; height:10px; border-radius:50%; }
+  #tracing-container.locked .trace-handle { display:none; }
+  #trace-lock-btn, #trace-reset-btn { z-index:3; opacity:0; transition:opacity 0.15s; }
+  #tracing-container:hover #trace-lock-btn,
+  #tracing-container:hover #trace-reset-btn { opacity:1; }
+  #trace-lock-btn { position:absolute; top:4px; left:4px; width:22px; height:22px; background:rgba(0,0,0,0.45); border-radius:4px; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:11px; color:#fff; line-height:1; font-weight:bold; letter-spacing:0; }
+  #tracing-container.locked #trace-lock-btn { opacity:1 !important; background:rgba(80,140,200,0.75); }  /* always visible when locked */
+
+  /* === DESKTOP LAYOUT === */
+  @media (min-width: 900px) {
+    #app { flex-direction: row; flex-wrap: wrap; }
+    #toolbar { width: 100%; order: -1; }
+    #canvas-area { flex: 1; }
+    #bottom-bar { width: 100%; order: 99; }
+  }
+
+  /* === STITCH TEXTURE === */
+  .stitch-mode canvas { image-rendering: auto !important; }
+
+  /* scrollbar for panels */
+  .panel::-webkit-scrollbar { width: 4px; }
+  .panel::-webkit-scrollbar-track { background: transparent; }
+  .panel::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* modal */
+  .modal { position: fixed; inset: 0; z-index: 200; display: none; align-items: center; justify-content: center; background: rgba(0,0,0,0.4); padding: 16px; }
+  .modal.open { display: flex; }
+  .modal-box { background: var(--surface); border-radius: var(--radius); padding: 20px; width: 100%; max-width: 380px; max-height: 80vh; overflow-y: auto; }
+  .modal-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+
+  /* Toast */
+  #toast { position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 13px; opacity: 0; transition: all 0.3s; z-index: 999; pointer-events: none; white-space: nowrap; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TOOLBAR -->
+  <div id="toolbar">
+    <!-- Tool group -->
+    <button class="tb-btn active" id="tool-pencil" title="Pencil" onclick="setTool('pencil')">&#9998;</button>
+    <button class="tb-btn" id="tool-eraser" title="Eraser" onclick="setTool('eraser')">&#9723;</button>
+    <button class="tb-btn" id="tool-fill" title="Fill Bucket" onclick="setTool('fill')">&#9724;</button>
+    <button class="tb-btn" id="tool-pan" title="Pan / Scroll" onclick="setTool('pan')">&#8689;</button>
+    <div class="tb-sep"></div>
+    <!-- Color -->
+    <div class="tb-color-swatch" id="tb-color-swatch" onclick="openPanel('color-panel')" title="Color Picker"></div>
+    <div class="tb-sep"></div>
+    <!-- Edit -->
+    <button class="tb-btn" id="btn-undo" title="Undo" onclick="undo()">&#8617;</button>
+    <button class="tb-btn" id="btn-redo" title="Redo" onclick="redo()">&#8618;</button>
+    <div class="tb-sep"></div>
+    <!-- View — settings first so it's never clipped -->
+    <button class="tb-btn" title="Grid Settings" onclick="openPanel('grid-panel')">&#9881;</button>
+    <button class="tb-btn" id="btn-grid" title="Toggle Grid" onclick="toggleGrid()">&#8862;</button>
+    <button class="tb-btn" id="btn-guide" title="Guide Lines" onclick="toggleGuides()">&#9701;</button>
+    <button class="tb-btn" id="btn-center" title="Center Lines" onclick="toggleCenter()">&#10010;</button>
+    <button class="tb-btn" id="btn-stitch-mode" title="Stitch Preview" onclick="toggleStitchMode()">&#9632;</button>
+    <div class="tb-sep"></div>
+    <!-- Mirror -->
+    <button class="tb-btn" id="btn-mirror" title="Mirror Mode" onclick="openPanel('mirror-panel')">&#8651;</button>
+    <!-- Replace -->
+    <button class="tb-btn" title="Replace Color" onclick="openPanel('replace-panel')">&#8644;</button>
+    <div class="tb-sep"></div>
+    <!-- Panels -->
+    <button class="tb-btn" title="Thread Usage" onclick="openPanel('thread-panel')">&#9639;</button>
+    <button class="tb-btn" title="Floss Mapping" onclick="openPanel('floss-panel')">&#9675;</button>
+    <button class="tb-btn" title="Import Image" onclick="openPanel('import-panel')">&#9727;</button>
+    <button class="tb-btn" title="Tracing Image" onclick="openPanel('tracing-panel')">&#9673;</button>
+    <button class="tb-btn" title="Export / Save" onclick="openPanel('export-panel')">&#8681;</button>
+  </div>
+
+  <!-- CANVAS AREA -->
+  <div id="canvas-area">
+    <div id="canvas-wrapper">
+      <canvas id="main-canvas"></canvas>
+    </div>
+    <!-- Zoom controls floating -->
+    <div style="position:absolute;bottom:12px;right:12px;z-index:10;">
+      <div class="zoom-control">
+        <button class="zoom-btn" onclick="zoomOut()">−</button>
+        <span class="zoom-label" id="zoom-label">100%</span>
+        <button class="zoom-btn" onclick="zoomIn()">+</button>
+      </div>
+    </div>
+    <!-- Row/Col numbers canvas -->
+    <canvas id="ruler-canvas" style="position:absolute;top:0;left:0;pointer-events:none;"></canvas>
+    <!-- Tracing image overlay (draggable + resizable) -->
+    <div id="tracing-container" style="display:none;position:absolute;touch-action:none;cursor:move;box-sizing:border-box;">
+      <img id="tracing-img" alt="" style="display:block;width:100%;height:100%;object-fit:fill;pointer-events:none;user-select:none;">
+      <div class="trace-handle" data-corner="nw" style="top:-6px;left:-6px;cursor:nw-resize;"></div>
+      <div class="trace-handle" data-corner="ne" style="top:-6px;right:-6px;cursor:ne-resize;"></div>
+      <div class="trace-handle" data-corner="sw" style="bottom:-6px;left:-6px;cursor:sw-resize;"></div>
+      <div class="trace-handle" data-corner="se" style="bottom:-6px;right:-6px;cursor:se-resize;"></div>
+      <div class="trace-handle trace-edge" data-corner="n"  style="top:-5px;left:50%;transform:translateX(-50%);cursor:n-resize;"></div>
+      <div class="trace-handle trace-edge" data-corner="s"  style="bottom:-5px;left:50%;transform:translateX(-50%);cursor:s-resize;"></div>
+      <div class="trace-handle trace-edge" data-corner="w"  style="top:50%;left:-5px;transform:translateY(-50%);cursor:w-resize;"></div>
+      <div class="trace-handle trace-edge" data-corner="e"  style="top:50%;right:-5px;transform:translateY(-50%);cursor:e-resize;"></div>
+      <div id="trace-lock-btn"  title="Lock position (draw over image)">&#9633;</div>
+      <div id="trace-reset-btn" title="Fit to grid" style="position:absolute;top:4px;right:4px;width:22px;height:22px;background:rgba(0,0,0,0.45);border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:#fff;line-height:1;">&#8635;</div>
+    </div>
+  </div>
+
+  <!-- BOTTOM BAR -->
+  <div id="bottom-bar">
+    <span id="status-size">42×63</span>
+    <span>·</span>
+    <span id="status-colors">0 colors</span>
+    <span>·</span>
+    <span id="status-stitches">0 stitches</span>
+    <span style="flex:1"></span>
+    <span id="status-pos" style="color:var(--text3)"></span>
+  </div>
+</div>
+
+<!-- ======== PANELS ======== -->
+
+<!-- COLOR PANEL -->
+<div class="panel-overlay" id="color-panel">
+  <div class="panel-bg" onclick="closePanel('color-panel')"></div>
+  <div class="panel bottom" style="max-height:88vh;">
+    <div class="panel-header">
+      <span class="panel-title">Color Picker</span>
+      <button class="panel-close" onclick="closePanel('color-panel')">&#10005;</button>
+    </div>
+    <div class="panel-section">
+      <div class="color-preview-row">
+        <div class="color-preview-box" id="color-preview-box"></div>
+        <div style="flex:1">
+          <label>Hex</label>
+          <input type="text" class="color-hex-input" id="hex-input" maxlength="7" placeholder="#rrggbb" oninput="onHexInput(this.value)">
+        </div>
+      </div>
+      <canvas id="color-wheel-canvas" width="260" height="260" style="width:100%;max-width:280px;display:block;margin:0 auto;"></canvas>
+      <canvas id="color-brightness" height="20" style="width:100%;height:20px;border-radius:4px;cursor:pointer;margin-top:10px;touch-action:none;"></canvas>
+      <div class="rgb-display" style="margin-top:8px;">
+        <div class="rgb-field"><input type="number" id="r-input" min="0" max="255" oninput="onRGBInput()"><div class="rgb-label">R</div></div>
+        <div class="rgb-field"><input type="number" id="g-input" min="0" max="255" oninput="onRGBInput()"><div class="rgb-label">G</div></div>
+        <div class="rgb-field"><input type="number" id="b-input" min="0" max="255" oninput="onRGBInput()"><div class="rgb-label">B</div></div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="section-label">Recent Colors</div>
+      <div class="recent-colors" id="recent-colors-list"></div>
+    </div>
+    <div class="panel-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div class="section-label" style="margin:0">Saved Palette</div>
+        <button class="btn btn-secondary btn-sm" onclick="saveCurrentColor()">+ Add</button>
+      </div>
+      <div class="palette-grid" id="saved-palette-list"></div>
+    </div>
+    <div class="panel-section">
+      <div class="section-label">Palette Limiter</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <label style="margin:0;font-size:13px;">Max colors:</label>
+        <select id="palette-limit-select" style="width:auto;flex:1;" onchange="setPaletteLimit(this.value)">
+          <option value="0">Unlimited</option>
+          <option value="8">8</option>
+          <option value="12">12</option>
+          <option value="16">16</option>
+          <option value="24">24</option>
+          <option value="custom">Custom</option>
+        </select>
+        <input type="number" id="palette-limit-custom" style="width:60px;display:none;" min="1" max="256" placeholder="N" oninput="setPaletteLimitCustom(this.value)">
+      </div>
+      <div id="palette-limit-info" style="font-size:12px;color:var(--text2);margin-bottom:8px;"></div>
+      <button class="btn btn-secondary btn-sm" onclick="reducePaletteColors()" id="btn-reduce-palette" style="display:none;">Reduce to Palette</button>
+    </div>
+  </div>
+</div>
+
+<!-- GRID SETTINGS PANEL -->
+<div class="panel-overlay" id="grid-panel">
+  <div class="panel-bg" onclick="closePanel('grid-panel')"></div>
+  <div class="panel bottom">
+    <div class="panel-header">
+      <span class="panel-title">Grid Settings</span>
+      <button class="panel-close" onclick="closePanel('grid-panel')">&#10005;</button>
+    </div>
+    <div class="panel-section">
+      <div class="section-label">Presets</div>
+      <div class="presets-row">
+        <button class="preset-btn" onclick="applyPreset(42,63)">42×63</button>
+        <button class="preset-btn" onclick="applyPreset(63,42)">63×42</button>
+        <button class="preset-btn" onclick="applyPreset(42,28)">42×28</button>
+        <button class="preset-btn" onclick="applyPreset(28,42)">28×42</button>
+        <button class="preset-btn" onclick="applyPreset(20,20)">20×20</button>
+        <button class="preset-btn" onclick="applyPreset(40,40)">40×40</button>
+        <button class="preset-btn" onclick="applyPreset(80,80)">80×80</button>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="section-label">Custom Size</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div style="flex:1"><label>Width</label><input type="number" id="grid-w-input" min="4" max="300" value="42"></div>
+        <div style="flex:1"><label>Height</label><input type="number" id="grid-h-input" min="4" max="300" value="63"></div>
+        <button class="btn btn-primary btn-sm" style="margin-top:16px;" onclick="applyCustomGrid()">Apply</button>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="section-label">Display Options</div>
+      <div class="toggle-row">
+        <span class="toggle-label">Show grid lines</span>
+        <div class="toggle on" id="toggle-grid" onclick="toggleGrid()"></div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Guide lines every</span>
+        <div style="display:flex;gap:6px;">
+          <button class="preset-btn" id="guide-5" onclick="setGuideStep(5)">5</button>
+          <button class="preset-btn" id="guide-10" onclick="setGuideStep(10)">10</button>
+          <button class="preset-btn" id="guide-off" onclick="setGuideStep(0)">Off</button>
+        </div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Center lines</span>
+        <div class="toggle" id="toggle-center" onclick="toggleCenter()"></div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Row/Col numbers</span>
+        <div class="toggle on" id="toggle-rulers" onclick="toggleRulers()"></div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Stitch texture</span>
+        <div class="toggle" id="toggle-stitch" onclick="toggleStitchMode()"></div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="section-label">Zoom</div>
+      <div class="presets-row">
+        <button class="preset-btn" onclick="setZoom(0.5)">50%</button>
+        <button class="preset-btn" onclick="setZoom(1)">100%</button>
+        <button class="preset-btn" onclick="setZoom(2)">200%</button>
+        <button class="preset-btn" onclick="setZoom(4)">400%</button>
+        <button class="preset-btn" onclick="fitToScreen()">Fit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MIRROR PANEL -->
+<div class="panel-overlay" id="mirror-panel">
+  <div class="panel-bg" onclick="closePanel('mirror-panel')"></div>
+  <div class="panel bottom">
+    <div class="panel-header">
+      <span class="panel-title">Mirror / Symmetry</span>
+      <button class="panel-close" onclick="closePanel('mirror-panel')">&#10005;</button>
+    </div>
+    <div class="panel-section">
+      <div class="toggle-row">
+        <span class="toggle-label">Horizontal mirror</span>
+        <div class="toggle" id="toggle-mirror-h" onclick="toggleMirror('h')"></div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Vertical mirror</span>
+        <div class="toggle" id="toggle-mirror-v" onclick="toggleMirror('v')"></div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Four-way symmetry</span>
+        <div class="toggle" id="toggle-mirror-4" onclick="toggleMirror('4')"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REPLACE COLOR PANEL -->
+<div class="panel-overlay" id="replace-panel">
+  <div class="panel-bg" onclick="closePanel('replace-panel')"></div>
+  <div class="panel bottom">
+    <div class="panel-header">
+      <span class="panel-title">Replace Color</span>
+      <button class="panel-close" onclick="closePanel('replace-panel')">&#10005;</button>
+    </div>
+    <div class="panel-section">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Select a source color from your canvas, then pick a replacement.</p>
+      <div class="replace-row">
+        <div>
+          <label>Source color (click to pick from canvas)</label>
+          <div class="replace-swatch" id="replace-from-swatch" onclick="startPickFromCanvas('from')" style="cursor:crosshair;"></div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;" id="replace-from-hex"></div>
+        </div>
+        <div style="font-size:24px;color:var(--text3);">→</div>
+        <div>
+          <label>Replacement color</label>
+          <div class="replace-swatch" id="replace-to-swatch" onclick="setReplaceTarget()" style="background:var(--accent);"></div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;" id="replace-to-hex"></div>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-top:12px;" onclick="doReplaceColor()">Replace All</button>
+    </div>
+    <div class="panel-section">
+      <div class="section-label">Canvas Colors</div>
+      <div id="replace-color-list" class="palette-grid" style="margin-top:4px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- THREAD USAGE PANEL -->
+<div class="panel-overlay" id="thread-panel">
+  <div class="panel-bg" onclick="closePanel('thread-panel')"></div>
+  <div class="panel right">
+    <div class="panel-header">
+      <span class="panel-title">Thread Usage</span>
+      <button class="panel-close" onclick="closePanel('thread-panel')">&#10005;</button>
+    </div>
+    <div class="panel-section">
+      <div id="thread-stats-summary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
+    </div>
+    <div class="panel-section" style="padding-top:8px;">
+      <div id="thread-legend"></div>
+    </div>
+  </div>
+</div>
+
+<!-- FLOSS MAPPING PANEL -->
+<div class="panel-overlay" id="floss-panel">
+  <div class="panel-bg" onclick="closePanel('floss-panel')"></div>
+  <div class="panel right">
+    <div class="panel-header">
+      <span class="panel-title">Floss Mapping</span>
+      <button class="panel-close" onclick="closePanel('floss-panel')">&#10005;</button>
+    </div>
+    <div class="panel-section">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:0;">Map each color to a thread brand and code.</p>
+    </div>
+    <div id="floss-list" style="padding:0 16px 16px;"></div>
+  </div>
+</div>
+
+<!-- IMPORT IMAGE PANEL -->
+<div class="panel-overlay" id="import-panel">
+  <div class="panel-bg" onclick="closePanel('import-panel')"></div>
+  <div class="panel bottom" style="max-height:88vh;">
+    <div class="panel-header">
+      <span class="panel-title">Import Image</span>
+      <button class="panel-close" onclick="closePanel('import-panel')">&#10005;</button>
+    </div>
+    <div class="panel-section">
+      <div class="file-drop" id="img-drop-zone" onclick="document.getElementById('img-file-input').click()">
+        &#9654; Tap to choose an image
+        <input type="file" id="img-file-input" accept="image/*" style="display:none;" onchange="onImportImage(this)">
+      </div>
+    </div>
+    <div id="import-controls" style="display:none;">
+      <div class="panel-section">
+        <canvas id="img-preview-canvas" width="200" height="200" style="max-width:100%;display:block;margin:0 auto 12px;"></canvas>
+        <div class="section-label">Pixelation (Zoom Out)</div>
+        <div class="slider-row">
+          <input type="range" id="pixelation-slider" min="1" max="20" value="4" oninput="updateImportPreview()">
+          <span class="slider-val" id="pixelation-val">4×</span>
+        </div>
+      </div>
+      <div class="panel-section">
+        <div class="section-label">Max Colors</div>
+        <div class="slider-row">
+          <input type="range" id="import-colors-slider" min="2" max="32" value="16" oninput="updateImportPreview()">
+          <span class="slider-val" id="import-colors-val">16</span>
+        </div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-secondary" onclick="fitImportToCanvas()">Fit to Canvas</button>
+          <button class="btn btn-primary" onclick="applyImportToCanvas()">Apply to Canvas</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TRACING PANEL -->
+<div class="panel-overlay" id="tracing-panel">
+  <div class="panel-bg" onclick="closePanel('tracing-panel')"></div>
+  <div class="panel bottom">
+    <div class="panel-header">
+      <span class="panel-title">Tracing Reference</span>
+      <button class="panel-close" onclick="closePanel('tracing-panel')">&#10005;</button>
+    </div>
+    <div class="panel-section">
+      <div class="file-drop" onclick="document.getElementById('trace-file-input').click()">
+        &#9727; Upload reference image
+        <input type="file" id="trace-file-input" accept="image/*" style="display:none;" onchange="onTracingImage(this)">
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="toggle-row">
+        <span class="toggle-label">Show tracing image</span>
+        <div class="toggle" id="toggle-tracing" onclick="toggleTracing()"></div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Lock position (draw over)</span>
+        <div class="toggle" id="toggle-trace-lock" onclick="toggleTracingLock()"></div>
+      </div>
+      <div class="section-label" style="margin-top:8px;">Opacity</div>
+      <div class="slider-row">
+        <input type="range" id="trace-opacity-slider" min="5" max="80" value="30" oninput="updateTracingOpacity(this.value)">
+        <span class="slider-val" id="trace-opacity-val">30%</span>
+      </div>
+      <p style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.5;">Drag image to move &middot; Drag handles to resize &middot; Tap &#8635; to snap back to grid</p>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-secondary btn-sm" onclick="fitTracingToGrid();applyTracingTransform();">Fit to Grid</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearTracing()">Remove</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT PANEL -->
+<div class="panel-overlay" id="export-panel">
+  <div class="panel-bg" onclick="closePanel('export-panel')"></div>
+  <div class="panel bottom">
+    <div class="panel-header">
+      <span class="panel-title">Export & Save</span>
+      <button class="panel-close" onclick="closePanel('export-panel')">&#10005;</button>
+    </div>
+    <div class="panel-section">
+      <div class="section-label">Export</div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="exportPNG()">Export PNG</button>
+        <button class="btn btn-secondary" onclick="saveJSON()">Save JSON</button>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="section-label">Load</div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="document.getElementById('load-json-input').click()">Load JSON</button>
+        <input type="file" id="load-json-input" accept=".json" style="display:none;" onchange="loadJSON(this)">
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="section-label">Canvas</div>
+      <button class="btn btn-danger" onclick="confirmClear()">Clear Canvas</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm clear modal -->
+<div class="modal" id="confirm-modal">
+  <div class="modal-box">
+    <div class="modal-title">Clear Canvas?</div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:16px;">This will erase all stitches. This cannot be undone.</p>
+    <div class="btn-row">
+      <button class="btn btn-danger" onclick="clearCanvas();closeModal('confirm-modal')">Clear</button>
+      <button class="btn btn-secondary" onclick="closeModal('confirm-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ========================================================
+// STATE
+// ========================================================
+const state = {
+  gridW: 42,
+  gridH: 63,
+  cells: null,       // Uint32Array, packed RGBA color (0 = empty)
+  palette: [],       // saved colors array
+  recentColors: [],
+  flossMap: {},      // hex -> {brand, code, notes}
+  currentColor: '#c0392b',
+  tool: 'pencil',
+  zoom: 1,
+  offsetX: 0,
+  offsetY: 0,
+  showGrid: true,
+  showGuides: true,
+  guideStep: 5,
+  showCenter: false,
+  showRulers: true,
+  stitchMode: false,
+  mirrorH: false,
+  mirrorV: false,
+  mirror4: false,
+  paletteLimit: 0,
+  tracingVisible: false,
+  tracingOpacity: 0.3,
+  tracingLocked: false,
+  undoStack: [],
+  redoStack: [],
+  isDirty: false,
+  colorWheelBrightness: 1.0,
+  replaceFrom: null,
+  replaceTo: null,
+  pickingForReplace: null,
+  importSourceCanvas: null,
+};
+
+// ========================================================
+// CANVAS SETUP
+// ========================================================
+const canvas = document.getElementById('main-canvas');
+const ctx = canvas.getContext('2d');
+const wrapper = document.getElementById('canvas-wrapper');
+
+function initGrid(w, h, keepData) {
+  const newCells = new Uint32Array(w * h);
+  if (keepData && state.cells) {
+    const minW = Math.min(w, state.gridW);
+    const minH = Math.min(h, state.gridH);
+    for (let row = 0; row < minH; row++)
+      for (let col = 0; col < minW; col++)
+        newCells[row * w + col] = state.cells[row * state.gridW + col];
+  }
+  state.gridW = w;
+  state.gridH = h;
+  state.cells = newCells;
+  fitToScreen();
+  render();
+  updateStatus();
+}
+
+// Pack/unpack color
+function hexToUint32(hex) {
+  if (!hex || hex === '#000000' && hex.length < 7) return 0;
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
+}
+function uint32ToHex(v) {
+  if (!v) return null;
+  const r = (v) & 0xFF;
+  const g = (v >> 8) & 0xFF;
+  const b = (v >> 16) & 0xFF;
+  return '#' + r.toString(16).padStart(2,'0') + g.toString(16).padStart(2,'0') + b.toString(16).padStart(2,'0');
+}
+
+// ========================================================
+// RENDERING
+// ========================================================
+let renderPending = false;
+function render() {
+  if (renderPending) return;
+  renderPending = true;
+  requestAnimationFrame(_render);
+}
+
+function _render() {
+  renderPending = false;
+  const W = state.gridW, H = state.gridH;
+  const z = state.zoom;
+
+  // Use integer pixels per cell on the backing canvas to avoid fractional
+  // ImageData index bugs. CSS width/height handle the true (possibly fractional) display size.
+  const cellPx  = Math.max(1, Math.round(z));  // integer backing pixels per cell
+  const cssCell  = z;                           // true CSS pixels per cell (may be fractional)
+
+  const backingW = W * cellPx;
+  const backingH = H * cellPx;
+  const cssW     = W * cssCell;
+  const cssH     = H * cssCell;
+
+  canvas.width  = backingW;
+  canvas.height = backingH;
+  canvas.style.width    = cssW + 'px';
+  canvas.style.height   = cssH + 'px';
+  canvas.style.position = 'absolute';
+  canvas.style.left     = state.offsetX + 'px';
+  canvas.style.top      = state.offsetY + 'px';
+
+  ctx.clearRect(0, 0, backingW, backingH);
+
+  // Draw cells
+  if (state.stitchMode && cellPx >= 4) {
+    drawStitchCells(W, H, cellPx);
+  } else {
+    drawFlatCells(W, H, cellPx);
+  }
+
+  // Grid lines — only when cells are large enough to see them
+  if (state.showGrid && cssCell >= 3) {
+    ctx.strokeStyle = 'rgba(120,100,80,0.25)';
+    ctx.lineWidth = Math.max(0.5, cellPx * 0.05);
+    ctx.beginPath();
+    for (let c = 0; c <= W; c++) { ctx.moveTo(c*cellPx, 0); ctx.lineTo(c*cellPx, backingH); }
+    for (let r = 0; r <= H; r++) { ctx.moveTo(0, r*cellPx); ctx.lineTo(backingW, r*cellPx); }
+    ctx.stroke();
+  }
+
+  // Guide lines
+  if (state.guideStep > 0 && cssCell >= 2) {
+    ctx.strokeStyle = 'rgba(80,60,40,0.40)';
+    ctx.lineWidth = Math.max(1, cellPx * 0.12);
+    ctx.beginPath();
+    for (let c = state.guideStep; c < W; c += state.guideStep) {
+      ctx.moveTo(c*cellPx, 0); ctx.lineTo(c*cellPx, backingH);
+    }
+    for (let r = state.guideStep; r < H; r += state.guideStep) {
+      ctx.moveTo(0, r*cellPx); ctx.lineTo(backingW, r*cellPx);
+    }
+    ctx.stroke();
+  }
+
+  // Center lines
+  if (state.showCenter) {
+    ctx.strokeStyle = 'rgba(200,80,80,0.55)';
+    ctx.lineWidth = Math.max(1, cellPx * 0.1);
+    ctx.setLineDash([Math.max(2, cellPx*0.4), Math.max(2, cellPx*0.4)]);
+    ctx.beginPath();
+    const cx = Math.floor(W/2)*cellPx;
+    const cy = Math.floor(H/2)*cellPx;
+    ctx.moveTo(cx, 0); ctx.lineTo(cx, backingH);
+    ctx.moveTo(0, cy); ctx.lineTo(backingW, cy);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  updateRulers();
+  updateTracingPosition();
+}
+
+function drawFlatCells(W, H, cellPx) {
+  // cellPx is always a positive integer — safe for ImageData pixel loops
+  const imgData = ctx.createImageData(W * cellPx, H * cellPx);
+  const data = imgData.data;
+  const bgR = 232, bgG = 224, bgB = 212;
+  const stride = W * cellPx; // pixels per row in the image
+
+  for (let row = 0; row < H; row++) {
+    for (let col = 0; col < W; col++) {
+      const v = state.cells[row * W + col];
+      const r = v ? (v & 0xFF)        : bgR;
+      const g = v ? ((v >> 8) & 0xFF) : bgG;
+      const b = v ? ((v >> 16) & 0xFF): bgB;
+      const startX = col * cellPx;
+      const startY = row * cellPx;
+      for (let py = startY; py < startY + cellPx; py++) {
+        for (let px = startX; px < startX + cellPx; px++) {
+          const idx = (py * stride + px) * 4;
+          data[idx]   = r;
+          data[idx+1] = g;
+          data[idx+2] = b;
+          data[idx+3] = 255;
+        }
+      }
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+function drawStitchCells(W, H, cellPx) {
+  const bgR = 232, bgG = 224, bgB = 212;
+  for (let row = 0; row < H; row++) {
+    for (let col = 0; col < W; col++) {
+      const v = state.cells[row * W + col];
+      const x = col * cellPx, y = row * cellPx;
+      if (v === 0) {
+        ctx.fillStyle = `rgb(${bgR},${bgG},${bgB})`;
+        ctx.fillRect(x, y, cellPx, cellPx);
+      } else {
+        const r = v & 0xFF, g = (v >> 8) & 0xFF, b = (v >> 16) & 0xFF;
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(x, y, cellPx, cellPx);
+        const pad = Math.max(1, cellPx * 0.1);
+        const alpha = Math.min(0.35, 0.1 + cellPx * 0.01);
+        ctx.strokeStyle = `rgba(0,0,0,${alpha})`;
+        ctx.lineWidth = Math.max(0.5, cellPx * 0.08);
+        ctx.beginPath();
+        ctx.moveTo(x+pad, y+pad); ctx.lineTo(x+cellPx-pad, y+cellPx-pad);
+        ctx.moveTo(x+cellPx-pad, y+pad); ctx.lineTo(x+pad, y+cellPx-pad);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(255,255,255,${alpha*0.6})`;
+        ctx.lineWidth = Math.max(0.5, cellPx * 0.05);
+        ctx.beginPath();
+        ctx.moveTo(x+pad, y+pad*1.5); ctx.lineTo(x+cellPx*0.4, y+pad);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+// ========================================================
+// RULER CANVAS
+// ========================================================
+const rulerCanvas = document.getElementById('ruler-canvas');
+const rulerCtx = rulerCanvas.getContext('2d');
+
+function updateRulers() {
+  if (!state.showRulers) { rulerCanvas.style.display = 'none'; return; }
+  rulerCanvas.style.display = 'block';
+  const areaRect = document.getElementById('canvas-area').getBoundingClientRect();
+  rulerCanvas.width  = areaRect.width;
+  rulerCanvas.height = areaRect.height;
+  rulerCtx.clearRect(0, 0, rulerCanvas.width, rulerCanvas.height);
+
+  const z  = state.zoom;
+  const ox = state.offsetX, oy = state.offsetY;
+
+  // Pick a label interval so labels are never closer than MIN_GAP px.
+  // Preferred steps follow a 1-2-5 ladder for human-friendly numbers.
+  const MIN_GAP = 28; // minimum pixels between label centres
+  const preferred = [1, 2, 5, 10, 20, 50, 100, 200, 500];
+  let step = preferred[preferred.length - 1];
+  for (const s of preferred) {
+    if (s * z >= MIN_GAP) { step = s; break; }
+  }
+
+  const fontSize = Math.max(8, Math.min(11, z * 0.9));
+  rulerCtx.font      = `${fontSize}px monospace`;
+  rulerCtx.fillStyle = 'rgba(100,80,60,0.6)';
+
+  // Column numbers (top of grid)
+  rulerCtx.textAlign    = 'center';
+  rulerCtx.textBaseline = 'bottom';
+  // Always show col 1 if it fits, then every `step` after that
+  for (let c = 0; c <= state.gridW; c++) {
+    if (c !== 0 && c % step !== 0) continue;
+    const label = String(c + 1);
+    const x = ox + c * z;
+    if (x < -20 || x > areaRect.width + 20) continue;
+    rulerCtx.fillText(label, x, Math.max(fontSize, oy - 3));
+  }
+
+  // Row numbers (left of grid)
+  rulerCtx.textAlign    = 'right';
+  rulerCtx.textBaseline = 'middle';
+  for (let r = 0; r <= state.gridH; r++) {
+    if (r !== 0 && r % step !== 0) continue;
+    const label = String(r + 1);
+    const y = oy + r * z;
+    if (y < -20 || y > areaRect.height + 20) continue;
+    rulerCtx.fillText(label, Math.max(fontSize * 2, ox - 4), y);
+  }
+}
+
+// ========================================================
+// DRAWING TOOLS
+// ========================================================
+let isDrawing = false;
+let lastCell = null;
+
+function cellFromEvent(e) {
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  const col = Math.floor(x / state.zoom);
+  const row = Math.floor(y / state.zoom);
+  if (col < 0 || col >= state.gridW || row < 0 || row >= state.gridH) return null;
+  return { col, row };
+}
+
+function paintCell(col, row, saveUndo) {
+  if (col < 0 || col >= state.gridW || row < 0 || row >= state.gridH) return;
+  if (state.pickingForReplace) {
+    const v = state.cells[row * state.gridW + col];
+    const hex = uint32ToHex(v);
+    if (state.pickingForReplace === 'from') {
+      state.replaceFrom = hex;
+      document.getElementById('replace-from-swatch').style.background = hex || '#eee';
+      document.getElementById('replace-from-hex').textContent = hex || 'empty';
+      // Also populate the color list
+      updateReplaceColorList();
+    }
+    state.pickingForReplace = null;
+    canvas.style.cursor = 'crosshair';
+    showToast('Color picked');
+    return;
+  }
+
+  let colorVal;
+  if (state.tool === 'eraser') {
+    colorVal = 0;
+  } else if (state.tool === 'fill') {
+    floodFill(col, row);
+    render();
+    updateStatus();
+    scheduleAutoSave();
+    return;
+  } else {
+    colorVal = hexToUint32(state.currentColor);
+    addRecentColor(state.currentColor);
+  }
+
+  const idx = row * state.gridW + col;
+  if (state.cells[idx] === colorVal) return;
+
+  state.cells[idx] = colorVal;
+
+  // Mirror modes
+  const mCol = state.gridW - 1 - col;
+  const mRow = state.gridH - 1 - row;
+  if (state.mirrorH || state.mirror4) state.cells[row * state.gridW + mCol] = colorVal;
+  if (state.mirrorV || state.mirror4) state.cells[mRow * state.gridW + col] = colorVal;
+  if (state.mirror4) {
+    state.cells[mRow * state.gridW + mCol] = colorVal;
+    state.cells[row * state.gridW + mCol] = colorVal;
+  }
+
+  state.isDirty = true;
+}
+
+function floodFill(startCol, startRow) {
+  const target = state.cells[startRow * state.gridW + startCol];
+  const replacement = state.tool === 'eraser' ? 0 : hexToUint32(state.currentColor);
+  if (target === replacement) return;
+
+  const stack = [[startCol, startRow]];
+  const visited = new Uint8Array(state.gridW * state.gridH);
+
+  while (stack.length) {
+    const [c, r] = stack.pop();
+    if (c < 0 || c >= state.gridW || r < 0 || r >= state.gridH) continue;
+    const idx = r * state.gridW + c;
+    if (visited[idx] || state.cells[idx] !== target) continue;
+    visited[idx] = 1;
+    state.cells[idx] = replacement;
+    stack.push([c+1,r],[c-1,r],[c,r+1],[c,r-1]);
+  }
+  addRecentColor(state.currentColor);
+}
+
+// ========================================================
+// POINTER EVENTS
+// ========================================================
+wrapper.addEventListener('pointerdown', onPointerDown, {passive: false});
+wrapper.addEventListener('pointermove', onPointerMove, {passive: false});
+wrapper.addEventListener('pointerup', onPointerUp);
+wrapper.addEventListener('pointercancel', onPointerUp);
+
+let panStart = null;
+let panOffset = null;
+let pinchStartDist = null;
+let pinchStartZoom = null;
+let activePointers = {};
+
+function onPointerDown(e) {
+  e.preventDefault();
+  activePointers[e.pointerId] = {x: e.clientX, y: e.clientY};
+  const pointerCount = Object.keys(activePointers).length;
+
+  if (pointerCount === 2) {
+    // Second finger down — switch to pinch/pan mode, cancel any drawing
+    isDrawing = false;
+    const pts = Object.values(activePointers);
+    const dx = pts[0].x - pts[1].x, dy = pts[0].y - pts[1].y;
+    pinchStartDist = Math.sqrt(dx*dx + dy*dy);
+    pinchStartZoom = state.zoom;
+    // Also set up two-finger pan origin from midpoint
+    panStart  = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+    panOffset = { x: state.offsetX, y: state.offsetY };
+    return;
+  }
+
+  // Pan tool — always pan on single touch/click
+  if (state.tool === 'pan' || e.altKey || e.button === 1) {
+    panStart  = {x: e.clientX, y: e.clientY};
+    panOffset = {x: state.offsetX, y: state.offsetY};
+    wrapper.style.cursor = 'grabbing';
+    return;
+  }
+
+  // Drawing tools — only draw if pointer lands on the grid
+  const cell = cellFromEvent(e);
+  if (!cell) {
+    // Tapped outside grid — pan instead
+    panStart  = {x: e.clientX, y: e.clientY};
+    panOffset = {x: state.offsetX, y: state.offsetY};
+    return;
+  }
+
+  isDrawing = true;
+  lastCell = null;
+  pushUndo();
+  paintCell(cell.col, cell.row);
+  lastCell = cell;
+  render();
+  updateStatus();
+}
+
+function onPointerMove(e) {
+  e.preventDefault();
+  activePointers[e.pointerId] = {x: e.clientX, y: e.clientY};
+
+  const pointerCount = Object.keys(activePointers).length;
+
+  if (pointerCount === 2) {
+    const pts = Object.values(activePointers);
+    // Pinch zoom
+    if (pinchStartDist !== null) {
+      const dx = pts[0].x - pts[1].x, dy = pts[0].y - pts[1].y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const newZoom = Math.max(0.25, Math.min(20, pinchStartZoom * dist / pinchStartDist));
+      setZoom(newZoom);
+    }
+    // Two-finger pan (midpoint tracking)
+    if (panStart) {
+      const mx = (pts[0].x + pts[1].x) / 2;
+      const my = (pts[0].y + pts[1].y) / 2;
+      state.offsetX = panOffset.x + (mx - panStart.x);
+      state.offsetY = panOffset.y + (my - panStart.y);
+      canvas.style.left = state.offsetX + 'px';
+      canvas.style.top  = state.offsetY + 'px';
+      updateRulers();
+      updateTracingPosition();
+    }
+    return;
+  }
+
+  // Update cursor position display
+  const cell = cellFromEvent(e);
+  if (cell) {
+    document.getElementById('status-pos').textContent = `Col ${cell.col+1}, Row ${cell.row+1}`;
+  }
+
+  // Single-finger pan
+  if (panStart) {
+    state.offsetX = panOffset.x + (e.clientX - panStart.x);
+    state.offsetY = panOffset.y + (e.clientY - panStart.y);
+    canvas.style.left = state.offsetX + 'px';
+    canvas.style.top  = state.offsetY + 'px';
+    updateRulers();
+    updateTracingPosition();
+    return;
+  }
+
+  if (!isDrawing) return;
+  if (!cell) return;
+  if (lastCell && cell.col === lastCell.col && cell.row === lastCell.row) return;
+
+  // Interpolate for smooth lines
+  if (lastCell) {
+    const steps = Math.max(Math.abs(cell.col - lastCell.col), Math.abs(cell.row - lastCell.row));
+    for (let i = 0; i <= steps; i++) {
+      const ic = Math.round(lastCell.col + (cell.col - lastCell.col) * i / steps);
+      const ir = Math.round(lastCell.row + (cell.row - lastCell.row) * i / steps);
+      paintCell(ic, ir);
+    }
+  } else {
+    paintCell(cell.col, cell.row);
+  }
+  lastCell = cell;
+  render();
+  updateStatus();
+}
+
+function onPointerUp(e) {
+  delete activePointers[e.pointerId];
+  if (Object.keys(activePointers).length < 2) {
+    pinchStartDist = null;
+    panStart = null;
+  }
+  isDrawing = false;
+  lastCell = null;
+  // Restore correct cursor for current tool
+  if (state.tool === 'pan') wrapper.style.cursor = 'grab';
+  scheduleAutoSave();
+}
+
+// Double-tap to pan reset
+let lastTapTime = 0;
+wrapper.addEventListener('dblclick', () => {
+  fitToScreen();
+});
+
+// ========================================================
+// ZOOM & PAN
+// ========================================================
+function setZoom(z) {
+  state.zoom = Math.max(0.25, Math.min(20, z));
+  document.getElementById('zoom-label').textContent = Math.round(state.zoom * 100) + '%';
+  render();
+}
+
+function zoomIn() { setZoom(state.zoom * 1.25); }
+function zoomOut() { setZoom(state.zoom / 1.25); }
+
+function fitToScreen() {
+  const area = document.getElementById('canvas-area');
+  const aw = area.clientWidth - 20;
+  const ah = area.clientHeight - 20;
+  const zw = aw / state.gridW;
+  const zh = ah / state.gridH;
+  // Use fractional zoom — render pipeline now handles non-integer zoom cleanly
+  const z = Math.max(0.25, Math.min(20, Math.min(zw, zh)));
+  state.zoom = z;
+  // Center
+  const cssW = state.gridW * z;
+  const cssH = state.gridH * z;
+  state.offsetX = Math.max(0, (area.clientWidth - cssW) / 2);
+  state.offsetY = Math.max(0, (area.clientHeight - cssH) / 2);
+  document.getElementById('zoom-label').textContent = Math.round(z * 100) + '%';
+  render();
+}
+
+// Scroll wheel zoom
+wrapper.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.1 : 0.9;
+  setZoom(state.zoom * factor);
+}, {passive: false});
+
+// ========================================================
+// TOOLS
+// ========================================================
+function setTool(t) {
+  state.tool = t;
+  ['pencil','eraser','fill','pan'].forEach(id => {
+    const el = document.getElementById('tool-'+id);
+    if (el) el.classList.toggle('active', id === t);
+  });
+  wrapper.style.cursor = t === 'pan' ? 'grab' : 'crosshair';
+}
+
+function toggleGrid() {
+  state.showGrid = !state.showGrid;
+  document.getElementById('btn-grid').classList.toggle('active', state.showGrid);
+  document.getElementById('toggle-grid').classList.toggle('on', state.showGrid);
+  render();
+}
+
+function toggleGuides() {
+  state.guideStep = state.guideStep === 0 ? 5 : 0;
+  document.getElementById('btn-guide').classList.toggle('active', state.guideStep > 0);
+  render();
+}
+
+function setGuideStep(n) {
+  state.guideStep = n;
+  document.getElementById('btn-guide').classList.toggle('active', n > 0);
+  ['5','10','off'].forEach(k => {
+    const el = document.getElementById('guide-'+k);
+    if (el) el.style.background = (k == n || (k==='off' && n===0)) ? 'var(--accent-light)' : '';
+  });
+  render();
+}
+
+function toggleCenter() {
+  state.showCenter = !state.showCenter;
+  document.getElementById('btn-center').classList.toggle('active', state.showCenter);
+  document.getElementById('toggle-center').classList.toggle('on', state.showCenter);
+  render();
+}
+
+function toggleRulers() {
+  state.showRulers = !state.showRulers;
+  document.getElementById('toggle-rulers').classList.toggle('on', state.showRulers);
+  render();
+}
+
+function toggleStitchMode() {
+  state.stitchMode = !state.stitchMode;
+  document.getElementById('btn-stitch-mode').classList.toggle('active', state.stitchMode);
+  document.getElementById('toggle-stitch').classList.toggle('on', state.stitchMode);
+  render();
+}
+
+function toggleMirror(mode) {
+  if (mode === 'h') { state.mirrorH = !state.mirrorH; state.mirror4 = false; document.getElementById('toggle-mirror-h').classList.toggle('on', state.mirrorH); }
+  else if (mode === 'v') { state.mirrorV = !state.mirrorV; state.mirror4 = false; document.getElementById('toggle-mirror-v').classList.toggle('on', state.mirrorV); }
+  else if (mode === '4') { state.mirror4 = !state.mirror4; state.mirrorH = false; state.mirrorV = false; document.getElementById('toggle-mirror-4').classList.toggle('on', state.mirror4); document.getElementById('toggle-mirror-h').classList.remove('on'); document.getElementById('toggle-mirror-v').classList.remove('on'); }
+  document.getElementById('btn-mirror').classList.toggle('active', state.mirrorH || state.mirrorV || state.mirror4);
+}
+
+// ========================================================
+// UNDO / REDO
+// ========================================================
+function pushUndo() {
+  state.undoStack.push(state.cells.slice());
+  if (state.undoStack.length > 40) state.undoStack.shift();
+  state.redoStack = [];
+}
+
+function undo() {
+  if (!state.undoStack.length) return;
+  state.redoStack.push(state.cells.slice());
+  state.cells = state.undoStack.pop();
+  render();
+  updateStatus();
+}
+
+function redo() {
+  if (!state.redoStack.length) return;
+  state.undoStack.push(state.cells.slice());
+  state.cells = state.redoStack.pop();
+  render();
+  updateStatus();
+}
+
+// ========================================================
+// COLOR SYSTEM
+// ========================================================
+function setCurrentColor(hex) {
+  state.currentColor = hex;
+  document.getElementById('tb-color-swatch').style.background = hex;
+  document.getElementById('color-preview-box').style.background = hex;
+  const h = hex.replace('#','');
+  document.getElementById('hex-input').value = hex;
+  const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+  document.getElementById('r-input').value = r;
+  document.getElementById('g-input').value = g;
+  document.getElementById('b-input').value = b;
+  updateColorWheelMarker(r, g, b);
+  updateBrightnessBar(r, g, b);
+}
+
+function addRecentColor(hex) {
+  state.recentColors = state.recentColors.filter(c => c !== hex);
+  state.recentColors.unshift(hex);
+  if (state.recentColors.length > 24) state.recentColors.pop();
+  renderRecentColors();
+}
+
+function renderRecentColors() {
+  const el = document.getElementById('recent-colors-list');
+  el.innerHTML = '';
+  state.recentColors.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'color-dot' + (c === state.currentColor ? ' selected' : '');
+    d.style.background = c;
+    d.onclick = () => { setCurrentColor(c); renderRecentColors(); };
+    el.appendChild(d);
+  });
+}
+
+function saveCurrentColor() {
+  if (!state.palette.includes(state.currentColor)) {
+    state.palette.push(state.currentColor);
+    renderSavedPalette();
+  }
+}
+
+function renderSavedPalette() {
+  const el = document.getElementById('saved-palette-list');
+  el.innerHTML = '';
+  state.palette.forEach((c, i) => {
+    const d = document.createElement('div');
+    d.className = 'palette-swatch' + (c === state.currentColor ? ' selected' : '');
+    d.style.background = c;
+    const del = document.createElement('button');
+    del.className = 'del-btn';
+    del.textContent = '×';
+    del.onclick = (ev) => { ev.stopPropagation(); state.palette.splice(i,1); renderSavedPalette(); };
+    d.appendChild(del);
+    d.onclick = () => { setCurrentColor(c); renderSavedPalette(); };
+    el.appendChild(d);
+  });
+}
+
+function onHexInput(val) {
+  const v = val.trim();
+  const full = v.startsWith('#') ? v : '#' + v;
+  if (/^#[0-9a-fA-F]{6}$/.test(full)) {
+    setCurrentColor(full);
+  }
+}
+
+function onRGBInput() {
+  const r = parseInt(document.getElementById('r-input').value) || 0;
+  const g = parseInt(document.getElementById('g-input').value) || 0;
+  const b = parseInt(document.getElementById('b-input').value) || 0;
+  const hex = '#' + r.toString(16).padStart(2,'0') + g.toString(16).padStart(2,'0') + b.toString(16).padStart(2,'0');
+  state.currentColor = hex;
+  document.getElementById('hex-input').value = hex;
+  document.getElementById('color-preview-box').style.background = hex;
+  document.getElementById('tb-color-swatch').style.background = hex;
+  updateColorWheelMarker(r,g,b);
+}
+
+// ========================================================
+// COLOR WHEEL
+// ========================================================
+const wheelCanvas = document.getElementById('color-wheel-canvas');
+const wheelCtx = wheelCanvas.getContext('2d');
+let wheelSize = 260;
+
+function drawColorWheel() {
+  const size = wheelCanvas.offsetWidth || wheelSize;
+  wheelCanvas.width = size; wheelCanvas.height = size;
+  wheelSize = size;
+  const cx = size/2, cy = size/2, r = size/2 - 2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = x - cx, dy = y - cy;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist > r) continue;
+      const angle = Math.atan2(dy, dx);
+      const hue = ((angle * 180 / Math.PI) + 360) % 360;
+      const sat = dist / r;
+      const [rr,gg,bb] = hslToRgb(hue/360, sat, 0.5 * state.colorWheelBrightness + 0.5 * (1-state.colorWheelBrightness));
+      const idx = (y * size + x) * 4;
+      wheelCtx.fillStyle = `rgb(${rr},${gg},${bb})`;
+      wheelCtx.fillRect(x, y, 1, 1);
+    }
+  }
+  // Draw marker
+  const hex = state.currentColor;
+  if (hex) {
+    const h = hex.replace('#','');
+    const r2 = parseInt(h.slice(0,2),16), g2 = parseInt(h.slice(2,4),16), b2 = parseInt(h.slice(4,6),16);
+    updateColorWheelMarker(r2, g2, b2);
+  }
+}
+
+// Faster wheel draw using image data
+function drawColorWheelFast() {
+  const size = Math.floor(wheelCanvas.offsetWidth || wheelSize);
+  wheelCanvas.width = size; wheelCanvas.height = size;
+  wheelSize = size;
+  const imgData = wheelCtx.createImageData(size, size);
+  const d = imgData.data;
+  const cx = size/2, cy = size/2, r = size/2 - 2;
+  const bright = state.colorWheelBrightness;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const dx = x-cx, dy = y-cy, dist = Math.sqrt(dx*dx+dy*dy);
+      const i = (y*size+x)*4;
+      if (dist > r) { d[i+3] = 0; continue; }
+      const hue = ((Math.atan2(dy,dx)*180/Math.PI)+360)%360;
+      const sat = dist/r;
+      const [rr,gg,bb] = hslToRgb(hue/360, sat, 0.5 * bright + 0.5 * (1-bright));
+      d[i]=rr; d[i+1]=gg; d[i+2]=bb; d[i+3]=255;
+    }
+  }
+  wheelCtx.putImageData(imgData, 0, 0);
+}
+
+function updateColorWheelMarker(r, g, b) {
+  // redraw wheel + marker
+  drawColorWheelFast();
+  const [h, s, l] = rgbToHsl(r, g, b);
+  const size = wheelSize;
+  const cx = size/2, cy = size/2, rad = size/2 - 2;
+  const angle = h * 2 * Math.PI;
+  const dist = s * rad;
+  const mx = cx + Math.cos(angle) * dist;
+  const my = cy + Math.sin(angle) * dist;
+  wheelCtx.beginPath();
+  wheelCtx.arc(mx, my, 6, 0, Math.PI*2);
+  wheelCtx.strokeStyle = '#fff';
+  wheelCtx.lineWidth = 2;
+  wheelCtx.stroke();
+  wheelCtx.beginPath();
+  wheelCtx.arc(mx, my, 5, 0, Math.PI*2);
+  wheelCtx.strokeStyle = '#333';
+  wheelCtx.lineWidth = 1;
+  wheelCtx.stroke();
+}
+
+function updateBrightnessBar(r, g, b) {
+  const bc = document.getElementById('color-brightness');
+  const bctx = bc.getContext('2d');
+  const w = bc.offsetWidth || 260, h = 20;
+  bc.width = w; bc.height = h;
+  const [hue] = rgbToHsl(r, g, b);
+  const grad = bctx.createLinearGradient(0,0,w,0);
+  grad.addColorStop(0, 'black');
+  grad.addColorStop(0.5, `hsl(${hue*360},100%,50%)`);
+  grad.addColorStop(1, 'white');
+  bctx.fillStyle = grad;
+  bctx.fillRect(0,0,w,h);
+  // marker
+  const bval = (b * 0.114 + g * 0.587 + r * 0.299) / 255;
+  bctx.beginPath();
+  bctx.arc(bval * w, h/2, 8, 0, Math.PI*2);
+  bctx.strokeStyle = '#fff';
+  bctx.lineWidth = 2;
+  bctx.stroke();
+}
+
+// Wheel interactions
+let wheelDragging = false;
+wheelCanvas.addEventListener('pointerdown', onWheelPointer);
+wheelCanvas.addEventListener('pointermove', (e) => { if (wheelDragging) onWheelPointer(e); });
+wheelCanvas.addEventListener('pointerup', () => { wheelDragging = false; });
+
+function onWheelPointer(e) {
+  wheelDragging = true;
+  e.preventDefault();
+  const rect = wheelCanvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (wheelSize / rect.width);
+  const y = (e.clientY - rect.top) * (wheelSize / rect.height);
+  const cx = wheelSize/2, cy = wheelSize/2;
+  const dx = x-cx, dy = y-cy, dist = Math.sqrt(dx*dx+dy*dy), r = wheelSize/2-2;
+  if (dist > r+10) return;
+  const d = Math.min(dist, r);
+  const angle = ((Math.atan2(dy,dx)*180/Math.PI)+360)%360;
+  const sat = d/r;
+  const [rr,gg,bb] = hslToRgb(angle/360, sat, 0.5);
+  const hex = '#'+rr.toString(16).padStart(2,'0')+gg.toString(16).padStart(2,'0')+bb.toString(16).padStart(2,'0');
+  setCurrentColor(hex);
+}
+
+// Brightness bar interaction
+const briBar = document.getElementById('color-brightness');
+briBar.addEventListener('pointerdown', onBriPointer);
+briBar.addEventListener('pointermove', (e) => { if (e.buttons) onBriPointer(e); });
+
+function onBriPointer(e) {
+  e.preventDefault();
+  const rect = briBar.getBoundingClientRect();
+  const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  // Map t to brightness modification
+  const hex = state.currentColor.replace('#','');
+  const r = parseInt(hex.slice(0,2),16), g = parseInt(hex.slice(2,4),16), b = parseInt(hex.slice(4,6),16);
+  const [hue, sat] = rgbToHsl(r,g,b);
+  const l = t;
+  const [nr,ng,nb] = hslToRgb(hue, sat, l);
+  const nhex = '#'+nr.toString(16).padStart(2,'0')+ng.toString(16).padStart(2,'0')+nb.toString(16).padStart(2,'0');
+  setCurrentColor(nhex);
+}
+
+// ========================================================
+// COLOR UTILITIES
+// ========================================================
+function hslToRgb(h, s, l) {
+  let r, g, b;
+  if (s === 0) { r = g = b = l; }
+  else {
+    const hue2rgb = (p,q,t) => { if(t<0)t+=1; if(t>1)t-=1; if(t<1/6)return p+(q-p)*6*t; if(t<1/2)return q; if(t<2/3)return p+(q-p)*(2/3-t)*6; return p; };
+    const q = l < 0.5 ? l*(1+s) : l+s-l*s, p = 2*l-q;
+    r = hue2rgb(p,q,h+1/3); g = hue2rgb(p,q,h); b = hue2rgb(p,q,h-1/3);
+  }
+  return [Math.round(r*255), Math.round(g*255), Math.round(b*255)];
+}
+
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b);
+  let h, s, l = (max+min)/2;
+  if (max===min) { h = s = 0; }
+  else {
+    const d = max-min;
+    s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+    switch(max) {
+      case r: h = ((g-b)/d + (g<b?6:0))/6; break;
+      case g: h = ((b-r)/d + 2)/6; break;
+      case b: h = ((r-g)/d + 4)/6; break;
+    }
+  }
+  return [h, s, l];
+}
+
+function colorDistance(hex1, hex2) {
+  const h1 = hex1.replace('#',''), h2 = hex2.replace('#','');
+  const dr = parseInt(h1.slice(0,2),16) - parseInt(h2.slice(0,2),16);
+  const dg = parseInt(h1.slice(2,4),16) - parseInt(h2.slice(2,4),16);
+  const db = parseInt(h1.slice(4,6),16) - parseInt(h2.slice(4,6),16);
+  return dr*dr + dg*dg + db*db;
+}
+
+function nearestColor(hex, palette) {
+  let best = palette[0], bestDist = Infinity;
+  palette.forEach(c => { const d = colorDistance(hex, c); if (d < bestDist) { bestDist = d; best = c; } });
+  return best;
+}
+
+// ========================================================
+// PALETTE LIMITER
+// ========================================================
+function setPaletteLimit(val) {
+  if (val === 'custom') {
+    document.getElementById('palette-limit-custom').style.display = '';
+    return;
+  }
+  document.getElementById('palette-limit-custom').style.display = 'none';
+  state.paletteLimit = parseInt(val) || 0;
+  updatePaletteLimitInfo();
+}
+
+function setPaletteLimitCustom(val) {
+  state.paletteLimit = parseInt(val) || 0;
+  updatePaletteLimitInfo();
+}
+
+function updatePaletteLimitInfo() {
+  const unique = getUniqueColors();
+  const info = document.getElementById('palette-limit-info');
+  const btn = document.getElementById('btn-reduce-palette');
+  if (state.paletteLimit > 0) {
+    const over = unique.length > state.paletteLimit;
+    info.textContent = `Design has ${unique.length} colors. Limit: ${state.paletteLimit}. ${over ? '\u26a0 Over limit!' : '\u2713 Within limit.'}`;
+    btn.style.display = over ? '' : 'none';
+  } else {
+    info.textContent = `Design has ${unique.length} unique colors.`;
+    btn.style.display = 'none';
+  }
+}
+
+function reducePaletteColors() {
+  if (!state.paletteLimit || state.paletteLimit <= 0) return;
+  const unique = getUniqueColors();
+  if (unique.length <= state.paletteLimit) { showToast('Already within limit'); return; }
+  // K-means-like: pick top N most common, map others to nearest
+  const freq = {};
+  state.cells.forEach(v => { if (v) { const h = uint32ToHex(v); freq[h] = (freq[h]||0)+1; } });
+  const sorted = Object.entries(freq).sort((a,b)=>b[1]-a[1]);
+  const keep = sorted.slice(0, state.paletteLimit).map(e=>e[0]);
+  for (let i = 0; i < state.cells.length; i++) {
+    if (!state.cells[i]) continue;
+    const h = uint32ToHex(state.cells[i]);
+    if (!keep.includes(h)) {
+      state.cells[i] = hexToUint32(nearestColor(h, keep));
+    }
+  }
+  render();
+  updateStatus();
+  updatePaletteLimitInfo();
+  showToast(`Reduced to ${state.paletteLimit} colors`);
+}
+
+function getUniqueColors() {
+  const s = new Set();
+  state.cells.forEach(v => { if (v) s.add(uint32ToHex(v)); });
+  return [...s];
+}
+
+// ========================================================
+// THREAD USAGE PANEL
+// ========================================================
+function openThreadPanel() {
+  updateThreadPanel();
+  openPanel('thread-panel');
+}
+
+function updateThreadPanel() {
+  const total = state.gridW * state.gridH;
+  const freq = {};
+  let filled = 0;
+  state.cells.forEach(v => { if (v) { filled++; const h = uint32ToHex(v); freq[h] = (freq[h]||0)+1; } });
+  const sorted = Object.entries(freq).sort((a,b)=>b[1]-a[1]);
+
+  document.getElementById('thread-stats-summary').innerHTML = `
+    <span class="info-chip">&#9632; ${filled} stitches</span>
+    <span class="info-chip">&#9675; ${sorted.length} colors</span>
+    <span class="info-chip">&#9639; ${Math.round(filled/total*100)}% filled</span>
+  `;
+
+  const legend = document.getElementById('thread-legend');
+  legend.innerHTML = '';
+  sorted.forEach(([hex, count]) => {
+    const pct = (count / total * 100).toFixed(1);
+    const floss = state.flossMap[hex] || {};
+    const row = document.createElement('div');
+    row.className = 'legend-row';
+    row.innerHTML = `
+      <div class="legend-swatch" style="background:${hex}"></div>
+      <div class="legend-info">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span class="legend-color-hex">${hex}</span>
+          <span class="legend-count">${count}</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(100,parseFloat(pct))}%;background:${hex};"></div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:2px;">
+          <span class="legend-floss">${floss.brand ? floss.brand + ' ' + (floss.code||'') : ''}</span>
+          <span class="legend-pct">${pct}%</span>
+        </div>
+      </div>`;
+    legend.appendChild(row);
+  });
+}
+
+// ========================================================
+// FLOSS MAPPING
+// ========================================================
+function updateFlossList() {
+  const unique = getUniqueColors();
+  const list = document.getElementById('floss-list');
+  list.innerHTML = '';
+  if (!unique.length) {
+    list.innerHTML = '<p style="font-size:13px;color:var(--text3);padding:16px 0;">No colors on canvas yet.</p>';
+    return;
+  }
+  unique.forEach(hex => {
+    const f = state.flossMap[hex] || {};
+    const item = document.createElement('div');
+    item.className = 'floss-item';
+    item.innerHTML = `
+      <div class="floss-swatch" style="background:${hex}" data-hex="${hex}"></div>
+      <div class="floss-fields">
+        <div class="floss-row">
+          <select data-hex="${hex}" data-field="brand" onchange="updateFloss(this)">
+            <option value="">Brand</option>
+            <option ${f.brand==='DMC'?'selected':''}>DMC</option>
+            <option ${f.brand==='Anchor'?'selected':''}>Anchor</option>
+            <option ${f.brand==='Pepper Pot'?'selected':''}>Pepper Pot</option>
+            <option ${f.brand==='Planet Earth Silk'?'selected':''}>Planet Earth Silk</option>
+          </select>
+          <input type="text" placeholder="Code/Name" value="${f.code||''}" data-hex="${hex}" data-field="code" oninput="updateFloss(this)">
+        </div>
+        <input type="text" placeholder="Notes" value="${f.notes||''}" data-hex="${hex}" data-field="notes" oninput="updateFloss(this)" style="font-size:12px;">
+      </div>`;
+    list.appendChild(item);
+  });
+}
+
+function updateFloss(el) {
+  const hex = el.dataset.hex;
+  const field = el.dataset.field;
+  if (!state.flossMap[hex]) state.flossMap[hex] = {};
+  state.flossMap[hex][field] = el.value;
+}
+
+// ========================================================
+// REPLACE COLOR
+// ========================================================
+function startPickFromCanvas(mode) {
+  state.pickingForReplace = mode;
+  canvas.style.cursor = 'crosshair';
+  closePanel('replace-panel');
+  showToast('Tap a color on the canvas');
+}
+
+function setReplaceTarget() {
+  state.replaceTo = state.currentColor;
+  document.getElementById('replace-to-swatch').style.background = state.currentColor;
+  document.getElementById('replace-to-hex').textContent = state.currentColor;
+}
+
+function updateReplaceColorList() {
+  const list = document.getElementById('replace-color-list');
+  list.innerHTML = '';
+  getUniqueColors().forEach(hex => {
+    const d = document.createElement('div');
+    d.className = 'palette-swatch' + (hex === state.replaceFrom ? ' selected' : '');
+    d.style.background = hex;
+    d.onclick = () => {
+      state.replaceFrom = hex;
+      document.getElementById('replace-from-swatch').style.background = hex;
+      document.getElementById('replace-from-hex').textContent = hex;
+      updateReplaceColorList();
+    };
+    list.appendChild(d);
+  });
+}
+
+function doReplaceColor() {
+  if (!state.replaceFrom) { showToast('Pick a source color first'); return; }
+  const from = hexToUint32(state.replaceFrom);
+  const to = state.replaceTo ? hexToUint32(state.replaceTo) : 0;
+  let count = 0;
+  for (let i = 0; i < state.cells.length; i++) {
+    if (state.cells[i] === from) { state.cells[i] = to; count++; }
+  }
+  render();
+  updateStatus();
+  showToast(`Replaced ${count} stitches`);
+  scheduleAutoSave();
+}
+
+// ========================================================
+// GRID OPERATIONS
+// ========================================================
+function applyPreset(w, h) {
+  if (state.cells && state.cells.some(v => v !== 0)) {
+    if (!confirm(`Resize to ${w}×${h}? Current design will be adjusted.`)) return;
+  }
+  initGrid(w, h, true);
+  document.getElementById('grid-w-input').value = w;
+  document.getElementById('grid-h-input').value = h;
+}
+
+function applyCustomGrid() {
+  const w = parseInt(document.getElementById('grid-w-input').value) || 42;
+  const h = parseInt(document.getElementById('grid-h-input').value) || 63;
+  if (w < 4 || h < 4 || w > 300 || h > 300) { showToast('Size must be 4–300'); return; }
+  if (state.cells && state.cells.some(v => v !== 0)) {
+    if (!confirm(`Resize to ${w}×${h}? Current design will be adjusted.`)) return;
+  }
+  initGrid(w, h, true);
+}
+
+function clearCanvas() {
+  pushUndo();
+  state.cells.fill(0);
+  render();
+  updateStatus();
+  scheduleAutoSave();
+}
+
+function confirmClear() {
+  document.getElementById('confirm-modal').classList.add('open');
+}
+
+// ========================================================
+// IMAGE IMPORT
+// ========================================================
+let importSourceImg = null;
+let importPixelData = null;
+
+function onImportImage(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    importSourceImg = img;
+    document.getElementById('import-controls').style.display = '';
+    updateImportPreview();
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+
+function updateImportPreview() {
+  if (!importSourceImg) return;
+  const pixFactor = parseInt(document.getElementById('pixelation-slider').value);
+  const maxColors = parseInt(document.getElementById('import-colors-slider').value);
+  document.getElementById('pixelation-val').textContent = pixFactor + '×';
+  document.getElementById('import-colors-val').textContent = maxColors;
+
+  const pc = document.getElementById('img-preview-canvas');
+  const displayW = Math.min(280, importSourceImg.width);
+  const displayH = Math.round(importSourceImg.height * displayW / importSourceImg.width);
+  pc.width = displayW; pc.height = displayH;
+  const pctx = pc.getContext('2d');
+
+  // Draw source at small size then scale up for pixelation
+  const pw = Math.max(4, Math.floor(displayW / pixFactor));
+  const ph = Math.max(4, Math.floor(displayH / pixFactor));
+  const tmpC = document.createElement('canvas');
+  tmpC.width = pw; tmpC.height = ph;
+  const tmpCtx = tmpC.getContext('2d');
+  tmpCtx.drawImage(importSourceImg, 0, 0, pw, ph);
+  pctx.imageSmoothingEnabled = false;
+  pctx.drawImage(tmpC, 0, 0, displayW, displayH);
+
+  // Quantize colors
+  const imgData2 = pctx.getImageData(0, 0, displayW, displayH);
+  quantizeImageData(imgData2, maxColors);
+  pctx.putImageData(imgData2, 0, 0);
+  importPixelData = { imgData: imgData2, w: displayW, h: displayH, pw, ph };
+}
+
+function quantizeImageData(imgData, maxColors) {
+  // Simple median cut
+  const d = imgData.data;
+  const pixels = [];
+  for (let i = 0; i < d.length; i += 4) pixels.push([d[i], d[i+1], d[i+2]]);
+  const palette = medianCut(pixels, maxColors);
+  for (let i = 0; i < pixels.length; i++) {
+    const nc = nearestRGB(pixels[i], palette);
+    d[i*4] = nc[0]; d[i*4+1] = nc[1]; d[i*4+2] = nc[2]; d[i*4+3] = 255;
+  }
+}
+
+function medianCut(pixels, n) {
+  let buckets = [pixels.slice()];
+  while (buckets.length < n) {
+    const sorted = buckets.slice().sort((a,b) => b.length - a.length);
+    const largest = sorted[0];
+    buckets = buckets.filter(b => b !== largest);
+    const ranges = [0,1,2].map(ch => {
+      const vals = largest.map(p=>p[ch]);
+      return Math.max(...vals) - Math.min(...vals);
+    });
+    const ch = ranges.indexOf(Math.max(...ranges));
+    largest.sort((a,b) => a[ch]-b[ch]);
+    const mid = Math.floor(largest.length/2);
+    buckets.push(largest.slice(0,mid), largest.slice(mid));
+  }
+  return buckets.map(b => {
+    const avg = [0,0,0];
+    b.forEach(p => { avg[0]+=p[0]; avg[1]+=p[1]; avg[2]+=p[2]; });
+    return avg.map(v => Math.round(v/b.length));
+  });
+}
+
+function nearestRGB(pixel, palette) {
+  let best = palette[0], bestD = Infinity;
+  palette.forEach(c => {
+    const d = (pixel[0]-c[0])**2+(pixel[1]-c[1])**2+(pixel[2]-c[2])**2;
+    if (d < bestD) { bestD = d; best = c; }
+  });
+  return best;
+}
+
+function fitImportToCanvas() {
+  // just updates pixelation slider to match canvas dimensions
+  if (!importSourceImg) return;
+  const scaleX = importSourceImg.width / state.gridW;
+  const scaleY = importSourceImg.height / state.gridH;
+  const scale = Math.max(1, Math.round(Math.max(scaleX, scaleY)));
+  document.getElementById('pixelation-slider').value = Math.min(20, scale);
+  updateImportPreview();
+}
+
+function applyImportToCanvas() {
+  if (!importPixelData) return;
+  const { imgData, w, h, pw, ph } = importPixelData;
+  // Scale to grid
+  pushUndo();
+  for (let row = 0; row < state.gridH; row++) {
+    for (let col = 0; col < state.gridW; col++) {
+      const px = Math.floor(col * w / state.gridW);
+      const py = Math.floor(row * h / state.gridH);
+      const si = (py * w + px) * 4;
+      const d = imgData.data;
+      const hex = '#' + d[si].toString(16).padStart(2,'0') + d[si+1].toString(16).padStart(2,'0') + d[si+2].toString(16).padStart(2,'0');
+      state.cells[row * state.gridW + col] = hexToUint32(hex);
+    }
+  }
+  render();
+  updateStatus();
+  closePanel('import-panel');
+  showToast('Image applied to canvas!');
+  scheduleAutoSave();
+}
+
+// ========================================================
+// TRACING IMAGE
+// ========================================================
+// ========================================================
+// TRACING IMAGE — draggable + resizable overlay
+// ========================================================
+
+// Tracing state (in CSS pixels, canvas-area-relative)
+const tracingState = {
+  x: 0, y: 0,       // top-left position
+  w: 200, h: 200,    // size
+  loaded: false,
+};
+
+function onTracingImage(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const img = document.getElementById('tracing-img');
+  const url = URL.createObjectURL(file);
+  img.src = url;
+  img.onload = () => {
+    tracingState.loaded = true;
+    state.tracingVisible = true;
+    document.getElementById('toggle-tracing').classList.add('on');
+    // Default: fit to grid bounds
+    fitTracingToGrid();
+    applyTracingTransform();
+  };
+}
+
+function fitTracingToGrid() {
+  // Position and size the tracing overlay to match the current grid on screen
+  const z = state.zoom;
+  tracingState.x = state.offsetX;
+  tracingState.y = state.offsetY;
+  tracingState.w = state.gridW * z;
+  tracingState.h = state.gridH * z;
+}
+
+function applyTracingTransform() {
+  const container = document.getElementById('tracing-container');
+  container.style.display = (state.tracingVisible && tracingState.loaded) ? 'block' : 'none';
+  container.style.left   = tracingState.x + 'px';
+  container.style.top    = tracingState.y + 'px';
+  container.style.width  = Math.max(20, tracingState.w) + 'px';
+  container.style.height = Math.max(20, tracingState.h) + 'px';
+  document.getElementById('tracing-img').style.opacity = state.tracingOpacity;
+  // Apply locked state
+  container.classList.toggle('locked', state.tracingLocked);
+  container.style.cursor = state.tracingLocked ? 'default' : 'move';
+  container.style.touchAction = state.tracingLocked ? 'none' : 'none';
+  document.getElementById('toggle-trace-lock').classList.toggle('on', state.tracingLocked);
+  // Update lock button icon
+  const lockBtn = document.getElementById('trace-lock-btn');
+  lockBtn.title     = state.tracingLocked ? 'Unlock to move/resize' : 'Lock position (draw over image)';
+  lockBtn.innerHTML = state.tracingLocked ? '&#9632;' : '&#9633;';  // filled=locked, empty=unlocked
+}
+
+function toggleTracingLock() {
+  state.tracingLocked = !state.tracingLocked;
+  applyTracingTransform();
+}
+
+// NOTE: updateTracingPosition kept for compat with render() calls — just re-applies transform
+function updateTracingPosition() {
+  applyTracingTransform();
+}
+
+function toggleTracing() {
+  state.tracingVisible = !state.tracingVisible;
+  document.getElementById('toggle-tracing').classList.toggle('on', state.tracingVisible);
+  applyTracingTransform();
+}
+
+function updateTracingOpacity(val) {
+  state.tracingOpacity = val / 100;
+  document.getElementById('trace-opacity-val').textContent = val + '%';
+  document.getElementById('tracing-img').style.opacity = state.tracingOpacity;
+}
+
+function clearTracing() {
+  tracingState.loaded = false;
+  state.tracingLocked = false;
+  const img = document.getElementById('tracing-img');
+  img.src = '';
+  document.getElementById('tracing-container').style.display = 'none';
+  document.getElementById('tracing-container').classList.remove('locked');
+  state.tracingVisible = false;
+  document.getElementById('toggle-tracing').classList.remove('on');
+  document.getElementById('toggle-trace-lock').classList.remove('on');
+}
+
+// ---- Drag & Resize interaction ----
+(function initTracingInteraction() {
+  const container = document.getElementById('tracing-container');
+  const resetBtn  = document.getElementById('trace-reset-btn');
+  const lockBtn   = document.getElementById('trace-lock-btn');
+
+  let action = null; // 'move' | corner string
+  let startX, startY, startState;
+
+  function clampSize(w, h) {
+    return { w: Math.max(20, w), h: Math.max(20, h) };
+  }
+
+  function onStart(e) {
+    if (!tracingState.loaded) return;
+    if (state.tracingLocked) return;        // locked — let events pass through
+    // Prevent canvas drawing while interacting with tracing overlay
+    e.stopPropagation();
+    const corner = e.target.dataset.corner;
+    action = corner || 'move';
+    const pt = e.touches ? e.touches[0] : e;
+    startX = pt.clientX;
+    startY = pt.clientY;
+    startState = { ...tracingState };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup',   onEnd);
+    window.addEventListener('touchmove',   onMove, { passive: false });
+    window.addEventListener('touchend',    onEnd);
+  }
+
+  function onMove(e) {
+    if (!action) return;
+    if (e.cancelable) e.preventDefault();
+    const pt = e.touches ? e.touches[0] : e;
+    const dx = pt.clientX - startX;
+    const dy = pt.clientY - startY;
+    const s  = startState;
+
+    if (action === 'move') {
+      tracingState.x = s.x + dx;
+      tracingState.y = s.y + dy;
+    } else {
+      // Resize from the dragged corner/edge
+      let nx = s.x, ny = s.y, nw = s.w, nh = s.h;
+
+      if (action.includes('e')) nw = s.w + dx;
+      if (action.includes('s')) nh = s.h + dy;
+      if (action.includes('w')) { nw = s.w - dx; nx = s.x + dx; }
+      if (action.includes('n')) { nh = s.h - dy; ny = s.y + dy; }
+
+      const c = clampSize(nw, nh);
+      // If clamped, anchor the fixed edge
+      if (c.w !== nw && action.includes('w')) nx = s.x + s.w - c.w;
+      if (c.h !== nh && action.includes('n')) ny = s.y + s.h - c.h;
+
+      tracingState.x = nx; tracingState.y = ny;
+      tracingState.w = c.w; tracingState.h = c.h;
+    }
+    applyTracingTransform();
+  }
+
+  function onEnd() {
+    action = null;
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup',   onEnd);
+    window.removeEventListener('touchmove',   onMove);
+    window.removeEventListener('touchend',    onEnd);
+  }
+
+  // Attach to container (move) and each handle (resize)
+  container.addEventListener('pointerdown', onStart);
+  container.addEventListener('touchstart',  onStart, { passive: false });
+
+  // Reset to grid button
+  resetBtn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    fitTracingToGrid();
+    applyTracingTransform();
+  });
+  resetBtn.addEventListener('touchstart', (e) => {
+    e.stopPropagation();
+    fitTracingToGrid();
+    applyTracingTransform();
+  }, { passive: false });
+
+  // Lock button — toggles lock without triggering move
+  lockBtn.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    toggleTracingLock();
+  });
+  lockBtn.addEventListener('touchstart', (e) => {
+    e.stopPropagation();
+    toggleTracingLock();
+  }, { passive: false });
+})();
+
+// ========================================================
+// EXPORT / SAVE
+// ========================================================
+function exportPNG() {
+  const W = state.gridW, H = state.gridH;
+  const size = Math.min(20, Math.max(4, Math.floor(800 / Math.max(W,H))));
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = W * size;
+  exportCanvas.height = H * size;
+  const ec = exportCanvas.getContext('2d');
+  ec.fillStyle = '#e8e0d4';
+  ec.fillRect(0, 0, W*size, H*size);
+  for (let row = 0; row < H; row++) {
+    for (let col = 0; col < W; col++) {
+      const v = state.cells[row*W+col];
+      if (v) {
+        const r = v&0xFF, g=(v>>8)&0xFF, b=(v>>16)&0xFF;
+        ec.fillStyle = `rgb(${r},${g},${b})`;
+        ec.fillRect(col*size, row*size, size, size);
+      }
+    }
+  }
+  const a = document.createElement('a');
+  a.download = 'needlepoint-pattern.png';
+  a.href = exportCanvas.toDataURL('image/png');
+  a.click();
+  showToast('PNG exported!');
+}
+
+function saveJSON() {
+  const data = {
+    version: 1,
+    gridW: state.gridW,
+    gridH: state.gridH,
+    cells: Array.from(state.cells),
+    palette: state.palette,
+    recentColors: state.recentColors,
+    flossMap: state.flossMap,
+    currentColor: state.currentColor,
+  };
+  const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.download = 'needlepoint-pattern.json';
+  a.href = URL.createObjectURL(blob);
+  a.click();
+  showToast('Design saved!');
+}
+
+function loadJSON(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      state.gridW = data.gridW || 42;
+      state.gridH = data.gridH || 63;
+      state.cells = new Uint32Array(data.cells || []);
+      state.palette = data.palette || [];
+      state.recentColors = data.recentColors || [];
+      state.flossMap = data.flossMap || {};
+      if (data.currentColor) setCurrentColor(data.currentColor);
+      renderSavedPalette();
+      renderRecentColors();
+      fitToScreen();
+      render();
+      updateStatus();
+      showToast('Design loaded!');
+    } catch(err) {
+      showToast('Error loading file');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ========================================================
+// AUTO SAVE
+// ========================================================
+let autoSaveTimer = null;
+function scheduleAutoSave() {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(autoSave, 3000);
+}
+
+function autoSave() {
+  const data = {
+    version: 1,
+    gridW: state.gridW,
+    gridH: state.gridH,
+    cells: Array.from(state.cells),
+    palette: state.palette,
+    recentColors: state.recentColors,
+    flossMap: state.flossMap,
+    currentColor: state.currentColor,
+  };
+  try {
+    localStorage.setItem('stitchstudio_autosave', JSON.stringify(data));
+  } catch(e) {}
+}
+
+function restoreAutoSave() {
+  try {
+    const raw = localStorage.getItem('stitchstudio_autosave');
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    state.gridW = data.gridW || 42;
+    state.gridH = data.gridH || 63;
+    state.cells = new Uint32Array(data.cells || []);
+    state.palette = data.palette || [];
+    state.recentColors = data.recentColors || [];
+    state.flossMap = data.flossMap || {};
+    if (data.currentColor) setCurrentColor(data.currentColor);
+    renderSavedPalette();
+    renderRecentColors();
+  } catch(e) {}
+}
+
+// ========================================================
+// STATUS BAR
+// ========================================================
+function updateStatus() {
+  document.getElementById('status-size').textContent = `${state.gridW}×${state.gridH}`;
+  const unique = getUniqueColors();
+  document.getElementById('status-colors').textContent = `${unique.length} colors`;
+  let filled = 0;
+  state.cells.forEach(v => { if (v) filled++; });
+  document.getElementById('status-stitches').textContent = `${filled} stitches`;
+  updatePaletteLimitInfo();
+}
+
+// ========================================================
+// PANEL MANAGEMENT
+// ========================================================
+function openPanel(id) {
+  document.getElementById(id).classList.add('open');
+  if (id === 'thread-panel') updateThreadPanel();
+  if (id === 'floss-panel') updateFlossList();
+  if (id === 'replace-panel') { updateReplaceColorList(); setReplaceTarget(); }
+  if (id === 'color-panel') { drawColorWheelFast(); renderRecentColors(); renderSavedPalette(); }
+}
+
+function closePanel(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+// ========================================================
+// TOAST
+// ========================================================
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// ========================================================
+// INIT
+// ========================================================
+function init() {
+  // Restore or create fresh
+  restoreAutoSave();
+  if (!state.cells || !state.cells.length) {
+    state.cells = new Uint32Array(state.gridW * state.gridH);
+  }
+
+  setCurrentColor(state.currentColor || '#8b6f47');
+  document.getElementById('tb-color-swatch').style.background = state.currentColor;
+
+  // Default palette
+  if (!state.palette.length) {
+    ['#c0392b','#e74c3c','#e67e22','#f39c12','#f1c40f',
+     '#2ecc71','#27ae60','#3498db','#2980b9','#9b59b6',
+     '#8e44ad','#34495e','#2c3e50','#ecf0f1','#ffffff','#1a0a00'].forEach(c => state.palette.push(c));
+    renderSavedPalette();
+  }
+
+  fitToScreen();
+  render();
+  updateStatus();
+
+  window.addEventListener('resize', () => { fitToScreen(); });
+
+  // === SCROLL LOCK ===
+  // Prevent all document-level touch scrolling (iOS Safari ignores CSS touch-action on <html>).
+  // Panels and modal boxes opt back in via their own scrollable containers.
+  document.addEventListener('touchmove', (e) => {
+    // Allow scrolling only if the touch target is inside a scrollable panel, modal, or toolbar
+    let el = e.target;
+    while (el && el !== document.body) {
+      if (el.classList && (el.classList.contains('panel') || el.classList.contains('modal-box'))) return;
+      if (el.id === 'toolbar') return;
+      el = el.parentElement;
+    }
+    e.preventDefault();
+  }, { passive: false });
+
+  // Also block touchstart-based rubber-band on iOS
+  document.addEventListener('touchstart', (e) => {
+    let el = e.target;
+    while (el && el !== document.body) {
+      if (el.classList && (el.classList.contains('panel') || el.classList.contains('modal-box'))) return;
+      el = el.parentElement;
+    }
+    // Don't prevent — that would break taps — just ensure no scroll starts
+  }, { passive: false });
+}
+
+init();
+</script>
+</body>
+</html>
